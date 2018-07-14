@@ -1,6 +1,6 @@
 # s4m
 
-`s4m` **s**eek out the **m**ean, **m**edian, **m**inimum and **m**aximum of a data set.
+`s4m` **s**eeks out the **m**ean, **m**edian, **m**inimum and **m**aximum of a data set.
 
 ## License
 
@@ -14,16 +14,16 @@ Help info. can be obtained by `./s4m -h`:
 
 ```shell
 Usage:
-  me2mx2 DataPoint1 DataPoint2 [ DataPoint3 ... ]
+  s4m DataPoint1 DataPoint2 [ DataPoint3 ... ]
     directly read data set from command line arguments.
-  me2mx2 -f SetSize FileName
+  s4m -f SetSize FileName
     read data set from specific input file.
 ```
 
 As shown above, to seek out "4m" of the data set $[4, 9, 5, 3, 10, 21]$, we can run:
 
 ```shell
-$ ./s4m 4 9 5 3 10 2
+$ ./s4m 4 9 5 3 10 21
 ```
 
 Besides, to seek out "4m" of the set of 3000 data points derived from the file `rand.dat`, we can run:
