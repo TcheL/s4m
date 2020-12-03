@@ -8,10 +8,10 @@
 
 !===============================================================================
 
-#define DoublePrecision
+#define DOUBLETYPE
 #define LLS 128
 #define LSS 20
-#define MAX_LEN_STDIN 1280000
+#define MAX_WIDTH_STDIN (LLS * 10000)
 
 !===============================================================================
 
@@ -20,7 +20,7 @@ module Para_mod
   implicit none
   public
 
-#ifndef DoublePrecision
+#ifndef DOUBLETYPE
   integer, parameter :: MK = 4
 #else
   integer, parameter :: MK = 8
@@ -38,7 +38,7 @@ module Para_mod
   contains
 
     subroutine Para_Init()
-      SetSize = 1
+      SetSize = 0
       FileName = 'NULL'
       ErrorPath = '/s4m'
       ErrorInfo = 'NULL'
@@ -59,17 +59,15 @@ module Para_mod
       ErrorPath = ErrorPath(:index(ErrorPath, '/', .true.) - 1)
     end subroutine Para_FileGetData
 
-    subroutine Para_StdinSeek(mean, minim, maxim)
-      real(kind = MK), intent(out) :: mean, minim, maxim
-      character(len = MAX_LEN_STDIN) :: instr, fmtstr
-      integer :: ios, k, n = 0
-      real(kind = MK) :: indat
-      ErrorPath = ErrorPath//'/Para_StdinSeek'
+    subroutine Para_StdinGetData()
+      character(len = :), allocatable :: DatString
+      character(len = MAX_WIDTH_STDIN) :: instr, fmtstr
+      integer :: ios, k
+      ErrorPath = ErrorPath//'/Para_StdinGetData'
       ErrorInfo = 'Except when read data from stdin'
-      mean = 0.0_MK
-      minim = huge(0.0_MK)
-      maxim = - huge(0.0_MK)
-      write(fmtstr, '(A, G0, A)') '(A', MAX_LEN_STDIN, ')'
+      DatString = ''
+      write(fmtstr, '(A, G0, A)') '(A', MAX_WIDTH_STDIN, ')'
+      write(*, '(A)') '>> Please input the data set, and press <Ctrl-D> to end:'
       do while(.true.)
         read(*, fmtstr, iostat = ios) instr
         if(ios < 0) exit
@@ -77,19 +75,16 @@ module Para_mod
         do while(.true.)
           instr = adjustl(instr(k:))
           if(len(trim(instr)) == 0) exit
-          read(instr, *, iostat = ios) indat
-          if(ios > 0) &
-            & call Para_ErrorExcept(.true., 'Improper data type from stdin')
-          n = n + 1
-          mean = mean + indat
-          if(indat < minim) minim = indat
-          if(indat > maxim) maxim = indat
           k = index(instr, ' ')
+          DatString = DatString//instr(:k)
+          SetSize = SetSize + 1
         end do
       end do
-      mean = mean/n
+      allocate(Dat(SetSize))
+      read(DatString, *, iostat = ios) Dat
+      if(ios > 0) call Para_ErrorExcept(.true., 'Improper data type')
       ErrorPath = ErrorPath(:index(ErrorPath, '/', .true.) - 1)
-    end subroutine Para_StdinSeek
+    end subroutine Para_StdinGetData
 
     subroutine Para_Destroy()
       if(allocated(ErrorPath)) deallocate(ErrorPath)
@@ -172,11 +167,11 @@ module CmdP_mod
           allocate(Dat(SetSize))
           do i = 1, nArg
             write(IndexStr, '(G0)') i
-            ErrorInfo = 'Except when handling the #' &
-              & //trim(adjustl(IndexStr))//' command line argument.'
+            ErrorInfo = 'Except when handling the #'//trim(adjustl(IndexStr)) &
+              & //' command line argument.'
             call CmdP_ChangePara(Dat(i), i, 'DataPoint' &
               & //trim(adjustl(IndexStr)))
-            end do
+          end do
         end if
       end if
       ErrorPath = ErrorPath(:index(ErrorPath, '/', .true.) - 1)
@@ -206,10 +201,8 @@ module CmdP_mod
       ErrorPath = ErrorPath//'/CmdP_ChangePara_Real'
       call get_command_argument(ith, CmdStr)
       read(CmdStr, *, iostat = ios) Var
-      if(ios > 0) then
-        call CmdP_PrintHelpInfo()
-        call Para_ErrorExcept(.true., String//' should be a REAL number.')
-      end if
+      if(ios > 0) &
+        & call Para_ErrorExcept(.true., String//' should be a REAL number.')
       ErrorPath = ErrorPath(:index(ErrorPath, '/', .true.) - 1)
     end subroutine CmdP_ChangePara_Real
     subroutine CmdP_ChangePara_Char(Var, ith, String)
@@ -225,11 +218,11 @@ module CmdP_mod
       write(*, *)
       write(*, '(A)') 'Usage:'
       write(*, '(A)') '  s4m'
-      write(*, '(A)') '    read data from stdin.'
+      write(*, '(A)') '    read data set from stdin.'
       write(*, '(A)') '  s4m DataPoint1 DataPoint2 [ DataPoint3 ... ]'
-      write(*, '(A)') '    directly read data set from command line arguments.'
+      write(*, '(A)') '    read data set from command line arguments.'
       write(*, '(A)') '  s4m -f SetSize FileName'
-      write(*, '(A)') '    read data set from specific input file.'
+      write(*, '(A)') '    read data set from the specific input file.'
       write(*, *)
     end subroutine CmdP_PrintHelpInfo
 
@@ -326,31 +319,19 @@ program main
   use Para_mod
   use CmdP_mod
   use Stat_mod
-  use ieee_arithmetic, only: IEEE_Value, IEEE_QUIET_NAN
   implicit none
-
-  real(kind = MK) mean, median, minim, maxim
 
   call Para_Init()
   call CmdP_GetProcess()
 
   if(IsFileGet) call Para_FileGetData()
-
-  if(IsStdinGet) then
-    call Para_StdinSeek(mean, minim, maxim)
-    median = IEEE_Value(median, IEEE_QUIET_NAN)
-  else
-    mean = Stat_Mean(Dat, SetSize)
-    median = Stat_Median(Dat, SetSize)
-    minim = minval(Dat)
-    maxim = maxval(Dat)
-  end if
+  if(IsStdinGet) call Para_StdinGetData()
 
   write(*, *)
-  write(*, '(A, G0)') 'Mean    = ', mean
-  write(*, '(A, G0)') 'Median  = ', median
-  write(*, '(A, G0)') 'Minimum = ', minim
-  write(*, '(A, G0)') 'Maximum = ', maxim
+  write(*, '(A, G0)') 'Mean    = ', Stat_Mean(Dat, SetSize)
+  write(*, '(A, G0)') 'Median  = ', Stat_Median(Dat, SetSize)
+  write(*, '(A, G0)') 'Minimum = ', minval(Dat)
+  write(*, '(A, G0)') 'Maximum = ', maxval(Dat)
   write(*, *)
 
   call Para_Destroy()
